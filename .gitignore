@@ -1,96 +1,70 @@
-use std::io;
+extern crate reqwest;
+extern crate serde_json;
+extern crate chrono;
 
-fn main() {
-    println!("Enter a: ");
-    let mut a = String::new();
-    io::stdin().read_line(&mut a).unwrap();
-    let a: f64 = a.trim().parse().unwrap();
+use chrono::NaiveDate;
+use std::collections::BTreeMap;
 
-    println!("Enter b: ");
-    let mut b = String::new();
-    io::stdin().read_line(&mut b).unwrap();
-    let b: f64 = b.trim().parse().unwrap();
+fn main() -> Result<(), reqwest::Error> {
+    let api_key = "Z4MA67RVRDT1BALY";
+    let symbol = "XAUUSD";
+    let start_date = "2023-01-01";
+    let end_date = "2023-12-01";
 
-    println!("Enter c: ");
-    let mut c = String::new();
-    io::stdin().read_line(&mut c).unwrap();
-    let c: f64 = c.trim().parse().unwrap();
+    let api_endpoint = "https://www.alphavantage.co/query";
+    let mut params = std::collections::HashMap::new();
+    params.insert("function", "TIME_SERIES_DAILY");
+    params.insert("symbol", symbol);
+    params.insert("apikey", api_key);
 
-    println!("Enter d: ");
-    let mut d = String::new();
-    io::stdin().read_line(&mut d).unwrap();
-    let d: f64 = d.trim().parse().unwrap();
+    let client = reqwest::blocking::Client::new();
+    let response = client.get(api_endpoint).query(&params).send()?;
 
-    println!("Enter i: ");
-    let mut i = String::new();
-    io::stdin().read_line(&mut i).unwrap();
-    let i: f64 = i.trim().parse().unwrap();
+    if response.status().is_success() {
+        let data: serde_json::Value = response.json()?;
+        let daily_prices = &data["Time Series (Daily)"];
 
-    println!("Enter j: ");
-    let mut j = String::new();
-    io::stdin().read_line(&mut j).unwrap();
-    let j: f64 = j.trim().parse().unwrap();
+        let start_date = NaiveDate::parse_from_str(start_date, "%Y-%m-%d").unwrap();
+        let end_date = NaiveDate::parse_from_str(end_date, "%Y-%m-%d").unwrap();
 
-    println!("Enter k: ");
-    let mut k = String::new();
-    io::stdin().read_line(&mut k).unwrap();
-    let k: f64 = k.trim().parse().unwrap();
+        let filtered_prices: BTreeMap<String, f64> = daily_prices
+            .as_object()
+            .unwrap()
+            .iter()
+            .filter_map(|(date, price)| {
+                let price_date = NaiveDate::parse_from_str(date, "%Y-%m-%d").unwrap();
+                if price_date >= start_date && price_date <= end_date {
+                    Some((
+                        date.clone(),
+                        price["4. close"]
+                            .as_str()
+                            .unwrap()
+                            .parse::<f64>()
+                            .unwrap(),
+                    ))
+                } else {
+                    None
+                }
+            })
+            .collect();
 
-    println!("Enter t1: ");
-    let mut t1 = String::new();
-    io::stdin().read_line(&mut t1).unwrap();
-    let t1: f64 = t1.trim().parse().unwrap();
+        if !filtered_prices.is_empty() {
+            let min_price = filtered_prices.iter().min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap()).unwrap();
+            let max_price = filtered_prices.iter().max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap()).unwrap();
 
-    println!("Enter t2: ");
-    let mut t2 = String::new();
-    io::stdin().read_line(&mut t2).unwrap();
-    let t2: f64 = t2.trim().parse().unwrap();
+            let (min_date, min_value) = min_price;
+            let (max_date, max_value) = max_price;
+            let middle_value = (min_value + max_value) / 2.0;
 
-
-    let mut fx_list: Vec<f64> = Vec::new();
-    let mut xyz_list: Vec<(i32, i32, i32)> = Vec::new();
-
-
-    for x in (t1 as i32)..=(t2 as i32) {
-        for y in (t1 as i32)..=(t2 as i32) {
-            for z in (t1 as i32)..=(t2 as i32) {
-                let fx = a * (x.pow(i as u32) as f64) + b * (y.pow(j as u32) as f64) + c * (z.pow(k as u32) as f64) + d;
-                fx_list.push(fx);
-                xyz_list.push((x, y, z));
-            }
+            println!("Minimum Price for {} from {} to {}, in Date: {}, is: ${}", symbol, start_date, end_date, min_date, min_value);
+            println!("Maximum Price for {} from {} to {}, in Date: {}, is: ${}", symbol, start_date, end_date, max_date, max_value);
+            println!("Midd Price is: ${}", middle_value);
+        } else {
+            println!("No data found for the specified date range.");
         }
-    }
-
-
-    let mut sorted: Vec<(f64, (i32, i32, i32))> = fx_list.iter().zip(xyz_list.iter()).map(|(fx, xyz)| (*fx, *xyz)).collect();
-    sorted.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-
-    let (sorted_fx_list, sorted_xyz_list): (Vec<f64>, Vec<(i32, i32, i32)>) = sorted.iter().cloned().unzip();
-
-
-    let min_value = *sorted_fx_list.first().unwrap();
-    let max_value = *sorted_fx_list.last().unwrap();
-
-
-    let m = sorted_fx_list.len();
-    let v1 = (m / 2) - 1;
-    let v2 = m / 2;
-    let v3 = m / 2;
-
-    println!("{:?}", fx_list);
-
-    println!("Minimum: {}", min_value);
-    println!("Maximum: {}", max_value);
-
-    if m % 2 == 0 {
-        println!("{}", sorted_fx_list[v1]);
-        println!("{}", sorted_fx_list[v2]);
-        println!("Middle is: {}", (sorted_fx_list[v1] + sorted_fx_list[v2]) / 2.0);
-        println!("(x, y, z) for v1: {:?}", sorted_xyz_list[v1]);
-        println!("(x, y, z) for v2: {:?}", sorted_xyz_list[v2]);
     } else {
-        println!("{}", sorted_fx_list[v3]);
-        println!("Middle is: {}", sorted_fx_list[v3]);
-        println!("(x, y, z) for v3: {:?}", sorted_xyz_list[v3]);
+        println!("Failed to retrieve data. Status code: {}", response.status());
     }
+
+    Ok(())
 }
